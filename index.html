@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Jet Engine Sim</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="./src/styles/main.css">
+</head>
+<body class="h-screen w-screen flex items-center justify-center bg-gray-900 relative">
+
+    <!-- Background Wiring Layer -->
+    <svg class="absolute inset-0 w-full h-full z-0 pointer-events-none opacity-40">
+        <defs><filter id="glow-wire"><feGaussianBlur stdDeviation="2" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+        <path id="w-rx" class="wire" d="M 20% 40% C 20% 60%, 40% 75%, 50% 75%" />
+        <path id="w-gsu" class="wire" d="M 80% 40% C 80% 60%, 60% 75%, 50% 75%" />
+        <path id="w-bat" class="wire" stroke="#a00" d="M 15% 75% L 40% 75%" />
+        <path id="w-eng" class="wire" d="M 50% 75% C 50% 60%, 35% 50%, 35% 50%" />
+        <path id="w-pump" class="wire" d="M 55% 75% L 85% 75%" />
+    </svg>
+
+    <!-- Main Grid -->
+    <div class="z-10 w-full max-w-[1400px] h-[95vh] grid grid-cols-12 grid-rows-6 gap-6 p-6">
+
+        <!-- 1. LEFT: Remote Controller -->
+        <div class="col-span-2 row-span-4 throttle-device flex flex-col items-center p-4 relative">
+            <div class="screw top-2 left-2"></div><div class="screw top-2 right-2"></div><div class="screw bottom-2 left-2"></div><div class="screw bottom-2 right-2"></div>
+            <h2 class="text-gray-400 font-bold mb-2 text-xs tracking-wider border-b border-gray-600 pb-1 w-full text-center">CONTROLLER</h2>
+            
+            <div class="flex flex-col items-center justify-between w-full h-full pb-2">
+                <div class="relative flex items-center justify-center flex-grow w-full">
+                    <div class="absolute -left-4 top-1/2 -translate-y-1/2 -rotate-90 text-[10px] text-gray-500 font-bold tracking-widest pointer-events-none">THROTTLE</div>
+                    <input type="range" id="throttle-input" min="0" max="100" value="0" class="throttle-lever">
+                    <div class="absolute bottom-8 bg-black px-2 py-1 rounded border border-gray-600 pointer-events-none">
+                        <span id="throttle-disp" class="text-xl font-bold text-blue-400 font-mono">0%</span>
+                    </div>
+                </div>
+                <div class="w-full flex justify-between items-end px-2 mt-2">
+                    <div class="flex flex-col items-center gap-1">
+                        <button id="trim-up" class="rocker-btn w-12 h-12 flex items-center justify-center text-lg" title="Trim Up"><i class="fas fa-caret-up"></i></button>
+                        <span class="text-[9px] text-gray-500 font-bold">TRIM UP</span>
+                    </div>
+                    <div class="flex flex-col items-center justify-end pb-2">
+                        <div id="trim-led" class="led bg-yellow-900 mb-1"></div>
+                        <span class="text-[8px] text-gray-500">READY</span>
+                    </div>
+                    <div class="flex flex-col items-center gap-1">
+                        <button id="trim-down" class="rocker-btn w-12 h-12 flex items-center justify-center text-lg" title="Trim Down"><i class="fas fa-caret-down"></i></button>
+                        <span class="text-[9px] text-gray-500 font-bold">TRIM DN</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. CENTER: Horizontal Jet Engine & Environment -->
+        <div id="engine-panel" class="col-span-8 row-span-4 flex flex-col items-center justify-center relative panel-box bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 border-none shadow-2xl overflow-hidden transition-all duration-500">
+            
+            <div class="absolute top-4 left-6 z-20">
+                <div class="text-xs text-gray-500 tracking-[0.3em]">SIMULATION VIEW</div>
+                <div class="text-2xl font-bold text-white font-orbitron mt-1">MINI JET ENGINE V11</div>
+            </div>
+
+            <!-- Altitude Indicator -->
+            <div id="env-alt-indicator" class="absolute top-4 right-6 z-20 font-black text-2xl font-mono text-blue-300 opacity-0 transition-opacity">
+                LA
+            </div>
+
+            <!-- FAILURE ALERT BOX -->
+            <div id="alert-box" class="absolute top-16 left-1/2 transform -translate-x-1/2 z-50 bg-red-600 text-white px-6 py-3 rounded shadow-[0_0_20px_rgba(255,0,0,0.8)] border-2 border-red-400 hidden flex-col items-center text-center">
+                <div class="text-lg font-bold flex items-center gap-2"><i class="fas fa-exclamation-triangle"></i> <span id="alert-title">WARNING</span></div>
+                <div id="alert-msg" class="text-xs font-mono mt-1">Engine Failure Detected</div>
+                <div id="alert-action" class="text-xs bg-black/30 px-2 py-1 rounded mt-2 font-bold text-yellow-300">Action: Trim Down Immediately</div>
+            </div>
+
+            <canvas id="flow-canvas" width="800" height="400" class="absolute inset-0 z-10 pointer-events-none"></canvas>
+
+            <svg id="engine-svg" viewBox="0 0 800 400" class="absolute inset-0 w-full h-full z-10 pointer-events-none">
+                <defs>
+                    <linearGradient id="grad-metal" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" style="stop-color:#444;stop-opacity:1" /> <stop offset="20%" style="stop-color:#999;stop-opacity:1" /> 
+                        <stop offset="50%" style="stop-color:#eee;stop-opacity:1" /> <stop offset="80%" style="stop-color:#999;stop-opacity:1" /> <stop offset="100%" style="stop-color:#444;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="grad-nozzle" x1="0%" y1="0%" x2="100%" y2="0%">
+                         <stop offset="0%" style="stop-color:#222;stop-opacity:1" /> <stop offset="100%" style="stop-color:#111;stop-opacity:1" />
+                    </linearGradient>
+                </defs>
+                <g transform="translate(100, 150)">
+                    <path d="M 50 0 Q 0 10 0 50 Q 0 90 50 100 L 80 100 L 80 0 Z" fill="#222" stroke="#444" />
+                    <path d="M 20 50 L 50 20 L 50 80 Z" fill="#800" />
+                    <rect x="80" y="0" width="180" height="100" fill="url(#grad-metal)" stroke="#333" />
+                    <rect x="100" y="-5" width="20" height="110" fill="#111" rx="2" /> <rect x="200" y="-5" width="20" height="110" fill="#111" rx="2" />
+                    <path d="M 260 5 L 320 20 L 320 80 L 260 95 Z" fill="url(#grad-nozzle)" stroke="#222" />
+                    <path d="M 320 20 L 320 80 Q 300 50 320 20" fill="#000" />
+                    <text x="170" y="55" text-anchor="middle" font-family="Arial" font-size="12" fill="#000" font-weight="bold" opacity="0.6">MINI JET</text>
+                    <path d="M 200 100 C 200 130, 250 130, 300 150" fill="none" stroke="#222" stroke-width="2" />
+                </g>
+            </svg>
+
+            <!-- Environment Control Bar -->
+            <div class="absolute bottom-2 left-1/2 transform -translate-x-1/2 z-30 flex gap-2 bg-black/60 p-1 rounded-md backdrop-blur-sm border border-gray-700">
+                <button id="env-basic" class="env-btn active">Basic</button>
+                <div class="w-px bg-gray-600 mx-1"></div>
+                <button id="env-low-temp" class="env-btn">Low Temp</button>
+                <button id="env-high-temp" class="env-btn">High Temp</button>
+                <div class="w-px bg-gray-600 mx-1"></div>
+                <button id="env-low-alt" class="env-btn">Low Altitude</button>
+                <button id="env-high-alt" class="env-btn">High Altitude</button>
+            </div>
+        </div>
+
+        <!-- 3. RIGHT: GSU Terminal -->
+        <div class="col-span-2 row-span-4 gsu-device flex flex-col relative">
+            <div class="screw top-1 left-1"></div><div class="screw top-1 right-1"></div><div class="screw bottom-1 left-1"></div><div class="screw bottom-1 right-1"></div>
+            <h2 class="text-green-400 font-bold mb-2 text-xs tracking-wider text-center border-b border-gray-700 pb-1"><i class="fas fa-terminal"></i> GSU TERMINAL</h2>
+            
+            <div class="gsu-screen flex-grow p-3 flex flex-col justify-between relative">
+                <div id="gsu-text-mode" class="h-full flex flex-col">
+                    <div class="gsu-row border-b border-blue-400/20 pb-1 text-[0.6rem] text-blue-200"><span>MINI JET</span><span>V4.5</span></div>
+                    <div class="gsu-row mt-2 items-end"><span class="gsu-label">RPM</span><span id="gsu-rpm" class="gsu-value text-green-400">0</span></div>
+                    <div class="gsu-row items-end"><span class="gsu-label">EGT</span><span id="gsu-egt" class="gsu-value text-red-400">25°C</span></div>
+                    <div class="gsu-row items-end"><span class="gsu-label">PUMP</span><span id="gsu-pump" class="gsu-value text-yellow-400">0.0V</span></div>
+                    <div class="gsu-row items-end"><span class="gsu-label">BAT</span><span id="gsu-bat" class="gsu-value">7.6V</span></div>
+                </div>
+                <div id="gsu-graph-mode" class="absolute top-8 left-0 w-full h-[60%] bg-black hidden border border-gray-700">
+                    <canvas id="graph-canvas" class="w-full h-full"></canvas>
+                </div>
+                <div class="text-center mt-auto pt-2 border-t border-blue-400/20 z-10">
+                    <div class="text-[0.6rem] text-gray-400 mb-1">STATUS</div>
+                    <div id="gsu-status" class="bg-black/40 rounded py-1 font-bold text-sm text-yellow-300 animate-pulse">OFF</div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 gap-2 mt-3 px-2">
+                <button id="btn-graph" class="bg-gray-700 hover:bg-gray-600 active:bg-gray-800 text-[10px] py-2 rounded text-white font-bold border border-gray-500 shadow transition-colors"><i class="fas fa-chart-line"></i> GRAPH</button>
+            </div>
+        </div>
+
+        <!-- 4. BOTTOM AREA -->
+        <div class="col-span-12 row-span-2 grid grid-cols-12 gap-6 items-center">
+            
+            <!-- Battery -->
+            <div class="col-span-3 flex justify-center">
+                <div id="battery-pack" class="battery-pack w-48 h-24 flex items-center justify-center relative cursor-pointer" title="Click to Simulate Voltage Drop (Fault)">
+                    <div class="battery-label px-4 py-2 inline-block text-center border border-gray-300 shadow-sm pointer-events-none">
+                        <div class="text-lg font-black italic tracking-tighter leading-none mb-1">HIGH POWER</div>
+                        <div class="text-[9px] font-bold text-gray-700">7.4V 60C LiPo</div>
+                    </div>
+                    <div class="absolute bottom-1 w-full text-center text-[9px] text-white/50 animate-pulse">CLICK FOR FAULT</div>
+                    <div class="wire-lead"></div><div class="wire-lead black"></div>
+                </div>
+            </div>
+
+            <!-- ECU -->
+            <div class="col-span-6 flex justify-center">
+                <div class="ecu-device w-[500px] h-32 p-4 flex flex-col items-center justify-between">
+                    <div class="screw top-2 left-2"></div><div class="screw top-2 right-2"></div><div class="screw bottom-2 left-2"></div><div class="screw bottom-2 right-2"></div>
+                    <div class="flex justify-between w-full px-4 items-center">
+                        <div class="text-[10px] font-bold text-yellow-900 opacity-70">DIGITAL CONTROL UNIT</div>
+                        <div class="ecu-label text-sm tracking-widest">JET ECU</div>
+                    </div>
+                    <div class="flex gap-8 items-end w-full justify-center px-4">
+                        <div class="flex flex-col items-center gap-2">
+                             <div class="flex gap-2 mb-1"><div id="led-pwr" class="led"></div><span class="text-[8px] font-bold text-yellow-900">PWR</span></div>
+                             <button id="btn-master" class="px-4 py-1 bg-red-700 hover:bg-red-600 text-white text-[10px] font-bold rounded shadow border border-red-900 active:scale-95 transition"><i class="fas fa-power-off"></i> MASTER</button>
+                        </div>
+                        <div class="flex gap-4 p-2 bg-black/10 rounded-lg border border-yellow-700/30">
+                            <div class="flex flex-col items-center gap-1"><div id="led-glow" class="led"></div> <span class="text-[8px] font-bold text-yellow-900">GLOW</span></div>
+                            <div class="flex flex-col items-center gap-1"><div id="led-start" class="led"></div> <span class="text-[8px] font-bold text-yellow-900">START</span></div>
+                            <div class="flex flex-col items-center gap-1"><div id="led-fuel" class="led"></div> <span class="text-[8px] font-bold text-yellow-900">FUEL</span></div>
+                        </div>
+                        <div class="flex gap-1 items-end">
+                            <div class="w-8 h-4 ecu-port rounded-t"></div><div class="w-8 h-4 ecu-port rounded-t"></div>
+                            <button id="btn-ab" class="ecu-btn" title="Arm Afterburner">A/B<br>ARM</button>
+                            <button id="btn-test-pump" class="ecu-btn" title="Run Pump Manually">TEST<br>PUMP</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fuel -->
+            <div class="col-span-3 flex justify-center items-center gap-4 p-4 panel-box bg-transparent border-none shadow-none">
+                <div id="fuel-tank-container" class="w-24 h-32 fuel-tank-realistic relative flex items-center justify-center cursor-pointer" title="Click to shake (creates bubbles)">
+                    <div id="fuel-liquid" class="fuel-liquid" style="height: 100%"></div>
+                    <div class="absolute inset-0 flex items-center justify-center rotate-90 text-[10px] text-white/50 font-bold z-10 mix-blend-overlay">KEROSENE</div>
+                    <div class="absolute -top-2 right-4 w-6 h-4 bg-red-700 rounded-sm border border-red-900 shadow"></div>
+                    <div class="absolute -top-6 left-1/2 -translate-x-1/2 w-12 h-6 border-4 border-white/30 rounded-t-lg"></div>
+                </div>
+                <div class="flex flex-col gap-1 items-center">
+                    <div class="fuel-pump-device w-12 h-12 flex items-center justify-center relative">
+                         <div class="absolute inset-0 bg-gradient-to-b from-transparent via-white/10 to-transparent"></div>
+                         <i id="icon-pump" class="fas fa-fan text-xl text-gray-300"></i>
+                    </div>
+                    <div class="w-20 h-2 bg-gray-700 rounded-full overflow-hidden mt-1 border border-gray-600">
+                        <div id="fuel-bar" class="h-full bg-yellow-400 w-0 transition-all duration-75"></div>
+                    </div>
+                    <span class="text-[9px] text-gray-400">PUMP OUT</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
+</body>
+</html>
+

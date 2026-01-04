@@ -1,0 +1,5 @@
+/* Engine panel styles */
+.wire { stroke: #333; stroke-width: 3; fill: none; stroke-linecap: round; }
+.wire.active { stroke: #0cf; stroke-dasharray: 10; animation: flowWire 0.5s linear infinite; }
+.eng-body { fill: url(#grad-metal); stroke: #444; stroke-width: 1; }
+

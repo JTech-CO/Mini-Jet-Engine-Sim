@@ -1,0 +1,19 @@
+.battery-pack {
+    background: linear-gradient(to right, #1e40af, #1d4ed8);
+    border-radius: 8px;
+    box-shadow: inset 2px 2px 5px rgba(255,255,255,0.2), inset -2px -2px 5px rgba(0,0,0,0.3), 0 5px 10px rgba(0,0,0,0.5);
+    position: relative; cursor: pointer; transition: transform 0.1s;
+}
+.battery-pack:active { transform: scale(0.98); }
+.battery-label {
+    background: #fefefe; color: #000;
+    font-family: Arial, sans-serif; font-weight: bold;
+    transform: skewX(-10deg);
+    box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+.wire-lead {
+    width: 40px; height: 4px; background: #cc0000; position: absolute; right: -30px; top: 30%;
+    border-radius: 2px; box-shadow: 0 2px 2px rgba(0,0,0,0.3);
+}
+.wire-lead.black { background: #111; top: 60%; }
+
